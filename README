@@ -11,8 +11,7 @@ HOW TO USE:
  8. # ./chroot build dropbear
  9. $ ./set-passwd (sets the root password for the initramfs)
 10. $ ./copy-firmware
-11. Run ./chroot wpa_passphrase "<SSID>" "<passphrase>", and update
-    conf/wpa_supplicant.conf accordingly.
+11. # ./gen-wificonf
 12. Edit the variables in conf/netsetup to reflect your own settings.
 13. Edit the ESP variable in conf/init to contain the location of your EFI System
     Partition.

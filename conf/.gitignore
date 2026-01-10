@@ -1,3 +1,4 @@
 firmware
 ssh_keys
 ramfs_password
+wpa_supplicant.conf

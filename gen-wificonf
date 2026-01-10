@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -e
+
+read -r -p "Enter SSID: " ssid
+read -r -p "Enter passphrase: " pass
+./chroot wpa_passphrase "$ssid" "$pass" | grep -v '#psk' > conf/wpa_supplicant.conf
+echo "Successfully stored network configuration in conf/wpa_supplicant.conf"
