@@ -27,6 +27,7 @@ mkdir -p $rootfs
 tar -xf $archive -C $rootfs
 
 mkdir -p $rootfs/build/{src,conf,out}
+cp conf/resolv.conf $rootfs/etc
 cat > $rootfs/root/.bashrc <<-EOF
 	alias ls='ls --color'
 	export PS1='\[\e[1;38;5;3m\]build-chroot \[\e[1;38;5;4m\]\w \[\e[0m\]\\$ '

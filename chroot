@@ -10,8 +10,6 @@ mount --bind src $rootfs/build/src
 mount --bind conf $rootfs/build/conf
 mount --bind out $rootfs/build/out
 
-cp /etc/resolv.conf $rootfs/etc/resolv.conf
-
 if [ "$1" = "build" ]; then
 	shift
 	set -- /build/conf/build $@
