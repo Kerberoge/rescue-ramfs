@@ -1,0 +1,3 @@
+#!/bin/sh
+
+ps -e -o pid,ppid,time,rss,args | awk '$1 != 2 && $2 != 2'

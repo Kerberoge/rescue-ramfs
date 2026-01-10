@@ -294,6 +294,7 @@ build_ramfs() {
 	cp /build/conf/inittab $ramfs_dir/etc
 	cp /build/conf/resolv.conf $ramfs_dir/etc
 	cp /build/conf/netsetup $ramfs_dir/bin
+	cp /build/conf/procs $ramfs_dir/bin
 	cp -Pr /build/conf/firmware $ramfs_dir/lib
 
 	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/out/initramfs.img
