@@ -1,0 +1,46 @@
+==========   rescue-ramfs - Tools for creating a minimal recovery initramfs   ==========
+
+HOW TO USE:
+ 1. # ./download-ramfs
+ 2. # ./chroot build musl
+ 3. # ./chroot build busybox
+ 4. # ./chroot build efibootmgr
+ 5. # ./chroot build e2fsprogs
+ 6. # ./chroot build wpa_supplicant
+ 7. # ./copy-keys  (copies host ssh private keys)
+ 8. # ./chroot build dropbear
+ 9. $ ./set-passwd (sets the root password for the initramfs)
+10. $ ./copy-firmware
+11. Run ./chroot wpa_passphrase "<SSID>" "<passphrase>", and update
+    conf/wpa_supplicant.conf accordingly.
+12. Edit the variables in conf/netsetup to reflect your own settings.
+13. Edit the ESP variable in conf/init to contain the location of your EFI System
+    Partition.
+14. # ./chroot build ramfs
+15. Edit reboot-ramfs to suit your preferences and reboot:
+    # ./reboot-ramfs
+
+After running './chroot build busybox' once, you may configure busybox by running:
+ # ./chroot build busybox configure
+
+Once you are booted into the initramfs, you should be able to ssh into your
+machine as you normally do.
+
+
+REQUIREMENTS
+You need to have minisign installed. You also need the Void release keys. On a Void
+Linux system, these can be obtained by installing void-release-keys. For obtaining
+the keys on a non-Void system, please consult:
+ https://docs.voidlinux.org/installation/index.html#verifying-digital-signature
+
+
+BUILD DURATIONS
+These values were recorded on a low-spec potato from 2018. Your own build durations
+will most certainly be shorter than these.
+
+	musl				21 min
+	busybox				31 s (excluding time to download archive)
+	efibootmgr			22 s
+	e2fsprogs			24 s
+	wpa_supplicant		55 s
+	dropbear			41 s
