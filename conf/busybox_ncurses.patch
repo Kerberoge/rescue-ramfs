@@ -1,0 +1,11 @@
+--- a/scripts/kconfig/lxdialog/check-lxdialog.sh	2026-01-02 02:11:15.448939857 +0100
++++ b/scripts/kconfig/lxdialog/check-lxdialog.sh	2026-01-02 02:11:33.091720274 +0100
+@@ -45,7 +45,7 @@
+ 
+ # Check if we can link to ncurses
+ check() {
+-        $cc -x c - -o $tmp 2>/dev/null <<'EOF'
++        $cc -Wno-implicit-int -x c - -o $tmp 2>/dev/null <<'EOF'
+ #include CURSES_LOC
+ main() {}
+ EOF

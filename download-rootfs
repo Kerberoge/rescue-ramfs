@@ -1,0 +1,40 @@
+#!/bin/sh
+
+set -e
+
+url=https://repo-default.voidlinux.org/live/current
+archive=void-x86_64-ROOTFS-20250202.tar.xz
+sums=sha256sum.txt
+sig=sha256sum.sig
+pubkey=/usr/share/void-release-keys/void-release-20250202.pub
+rootfs=buildroot
+
+if [ ! -f $archive ]; then
+	curl -LO $url/$archive
+	curl -LO $url/$sums
+	curl -LO $url/$sig
+	minisign -V -p $pubkey -x $sig -m $sums
+	sha256sum -c --ignore-missing $sums
+	rm $sums $sig
+fi
+
+packages="gcc make pkg-config wget curl git gnupg patch
+	ncurses-devel foot-terminfo
+	cpio lz4 xz
+	automake autoconf gettext-devel-tools libtool
+	bison flex"
+
+mkdir -p $rootfs
+tar -xf $archive -C $rootfs
+
+./chroot sh <<-EOF
+	xbps-install -Suy xbps
+	xbps-install -uy
+	xbps-install -y $(echo $packages)
+EOF
+
+mkdir -p $rootfs/build/{src,conf,out}
+cat > $rootfs/root/.bashrc <<-EOF
+	alias ls='ls --color'
+	export PS1='\[\e[1;38;5;3m\]build-chroot \[\e[1;38;5;4m\]\w \[\e[0m\]\\$ '
+EOF

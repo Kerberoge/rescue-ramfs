@@ -1,0 +1,24 @@
+#!/bin/bash
+
+rootfs=buildroot
+
+mount -t proc proc $rootfs/proc
+mount -t sysfs sys $rootfs/sys
+mount --rbind /dev $rootfs/dev
+
+mount --bind src $rootfs/build/src
+mount --bind conf $rootfs/build/conf
+mount --bind out $rootfs/build/out
+
+cp /etc/resolv.conf $rootfs/etc/resolv.conf
+
+if [ "$1" = "build" ]; then
+	shift
+	set -- /build/conf/build $@
+fi
+export sysroot=/build/sysroot
+export PATH=$PATH:$sysroot/bin
+export PKG_CONFIG_PATH=$sysroot/lib/pkgconfig
+chroot $rootfs $@
+
+umount -R $rootfs/{proc,sys,dev} $rootfs/build/{src,conf,out}

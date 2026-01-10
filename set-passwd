@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -e
+
+echo "Setting new password for root user in initramfs"
+read -rsp "Enter password: " passwd
+echo $passwd | openssl passwd -6 -stdin > conf/ramfs_password
+echo -e "\nSuccessfully updated password"

@@ -1,0 +1,315 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+	echo "Usage: $(basename $0) <target>"
+	exit 1
+}
+
+gpg_verify() {
+	file=$1
+	sig=$2
+	pubkey=$3
+
+	gpg --recv-keys $pubkey
+	gpg --verify $sig $file
+	for p in dirmngr keyboxd gpg-agent; do pkill $p; done || true
+}
+
+build_musl() {
+	version=v0.9.11
+	url=https://github.com/richfelker/musl-cross-make.git
+	dir=musl-cross-make-$version
+
+	cd /build/src
+	[ -d $dir ] && rm -rf $dir
+	
+	git clone $url $dir
+	cd $dir
+	git checkout $version
+	make TARGET=x86_64-linux-musl -j$(nproc)
+	mkdir -p $sysroot/{bin,lib}
+	ln -sf bin $sysroot/sbin
+	ln -sf lib $sysroot/lib64
+	ln -sf . $sysroot/usr
+	ln -sf . $sysroot/x86_64-linux-musl
+	make TARGET=x86_64-linux-musl OUTPUT=$sysroot install
+}
+
+build_busybox() {
+	version=1.36.1
+	url=https://busybox.net/downloads
+	archive=busybox-$version.tar.bz2
+	dir=${archive%.tar.bz2}
+
+	cd /build/src
+
+	if [ "$1" = "configure" ]; then
+		cd $dir
+		make menuconfig
+		cp .config /build/conf/busybox.config
+	else
+		[ -d $dir ] && rm -rf $dir
+		[ -f $archive ] || {
+			echo "Warning: downloading busybox source archive. Expect to wait forever (>30s)"
+			curl -LO $url/$archive
+		}
+		tar -xf $archive
+		cd $dir
+		cp /build/conf/busybox.config .config
+		patch -p1 < /build/conf/busybox_ncurses.patch
+		make -j$(nproc)
+		make install
+		cp _install/bin/busybox $sysroot/bin
+		find _install -type l -printf "%f\n" > $sysroot/busybox_applets
+		rm -r _install
+	fi
+}
+
+build_efivar() {
+	version=39
+	url=https://github.com/rhboot/efivar.git
+
+	cd /build/src
+	[ -d efivar-$version ] && rm -rf efivar-$version
+
+	git clone $url efivar-$version
+	cd efivar-$version
+	git checkout $version
+	make CROSS_COMPILE=x86_64-linux-musl- \
+		CFLAGS="--sysroot=$sysroot" -j$(nproc)
+	make prefix=$sysroot install
+}
+
+build_popt() {
+	version=1.19
+	url=https://github.com/rpm-software-management/popt.git
+
+	cd /build/src
+	[ -d popt-$version ] && rm -rf popt-$version
+
+	git clone $url popt-$version
+	cd popt-$version
+	git checkout popt-$version-release
+	./autogen.sh
+	./configure --prefix=$sysroot --host=x86_64-linux-musl
+	make -j$(nproc)
+	make install
+}
+
+build_efibootmgr() {
+	build_efivar
+	build_popt
+
+	version=18
+	url=https://github.com/rhboot/efibootmgr.git
+
+	cd /build/src
+	[ -d efibootmgr-$version ] && rm -rf efibootmgr-$version
+
+	git clone $url efibootmgr-$version
+	cd efibootmgr-$version
+	git checkout $version
+	export EFIDIR=/boot
+	ln -sf /usr/bin/pkg-config $sysroot/bin/x86_64-linux-musl-pkg-config
+	make CROSS_COMPILE=x86_64-linux-musl- \
+		CFLAGS="--sysroot=$sysroot -I=/include/efivar" -j$(nproc)
+	make prefix=$sysroot install
+}
+
+build_e2fsprogs() {
+	version=1.47.2
+	url=https://github.com/tytso/e2fsprogs/archive/refs/tags
+	archive=v$version.tar.gz
+	dir=e2fsprogs-$version
+
+	cd /build/src
+	[ -d $dir ] && rm -rf $dir
+
+	curl -LO $url/$archive
+	tar -xf $archive && rm $archive
+	cd $dir
+	mkdir build; cd build
+	../configure --prefix=$sysroot --enable-elf-shlibs \
+		--host=x86_64-linux-musl CFLAGS="--sysroot=$sysroot"
+	make -j$(nproc)
+	make install
+}
+
+build_openssl() {
+	version=3.5.4
+	url=https://github.com/openssl/openssl/releases/download/openssl-$version
+	archive=openssl-$version.tar.gz
+	sig=$archive.asc
+	pubkey=BA5473A2B0587B07FB27CF2D216094DFD0CB81EF
+	dir=${archive%.tar.gz}
+
+	cd /build/src
+	curl -LO $url/$archive
+	curl -LO $url/$sig
+	gpg_verify $archive $sig $pubkey
+	[ -d $dir ] && rm -rf $dir
+	tar -xf $archive && rm $archive $sig
+
+	cd $dir
+	./Configure --prefix=$sysroot --openssldir=etc/ssl no-docs no-apps \
+		CROSS_COMPILE=x86_64-linux-musl- CFLAGS="--sysroot=$sysroot"
+	make -j$(nproc)
+	make install
+}
+
+build_libnl() {
+	version=3.11.0
+	url=https://github.com/thom311/libnl/releases/download/libnl${version//./_}
+	archive=libnl-$version.tar.gz
+	sig=$archive.sig
+	pubkey=49EA7C670E0850E7419514F629C2366E4DFC5728
+	dir=${archive%.tar.gz}
+
+	cd /build/src
+	curl -LO $url/$archive
+	curl -LO $url/$sig
+	gpg_verify $archive $sig $pubkey
+	[ -d $dir ] && rm -rf $dir
+	tar -xf $archive && rm $archive $sig
+
+	cd $dir
+	./configure --prefix=$sysroot --host=x86_64-linux-musl --with-sysroot=$sysroot
+	make -j$(nproc)
+	make install
+}
+
+build_wpa_supplicant() {
+	#build_openssl
+	build_libnl
+
+	version=2.11
+	url=http://w1.fi/releases
+	archive=wpa_supplicant-$version.tar.gz
+	sig=$archive.asc
+	pubkey=EC4AA0A991A5F2464582D52D2B6EF432EFC895FA
+	dir=${archive%.tar.gz}
+
+	cd /build/src
+	curl -LO $url/$archive
+	curl -LO $url/$sig
+	gpg_verify $archive $sig $pubkey
+	[ -d $dir ] && rm -rf $dir
+	tar -xf $archive && rm $archive $sig
+
+	cd $dir/wpa_supplicant
+	sed "s|\$sysroot|$sysroot|" /build/conf/wpa_supplicant.config > .config
+	export PKG_CONFIG_PATH=$sysroot/lib/pkgconfig
+	make -j$(nproc)
+	cp wpa_supplicant $sysroot/bin
+}
+
+build_dropbear() {
+	version=2025.89
+	url=https://dropbear.nl/mirror
+	archive=dropbear-$version.tar.bz2
+	sig=$archive.asc
+	pubkey=F7347EF2EE2E07A267628CA944931494F29C6773
+	dir=${archive%.tar.bz2}
+
+	cd /build/src
+	curl -LO $url/$archive
+	curl -LO $url/$sig
+	gpg_verify $archive $sig $pubkey
+	[ -d $dir ] && rm -rf $dir
+	tar -xf $archive && rm $archive $sig
+
+	cd $dir
+	./configure --disable-zlib
+	make PROGRAMS="dropbearconvert" -j$(nproc)
+	if [ ! -d $keys_dir ] || ! ls $keys_dir | grep -q 'ssh_host_.*_key'; then
+		echo "Error: no ssh keys found in $keys_dir"
+		exit 1
+	fi
+	for key in $keys_dir/ssh_host_*_key; do
+		./dropbearconvert openssh dropbear \
+			$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
+	done
+	make clean
+
+	./configure --prefix=$sysroot --disable-zlib \
+		--disable-lastlog --disable-utmp --disable-wtmp \
+		--host=x86_64-linux-musl CFLAGS="-Os -W -Wall --sysroot=$sysroot"
+	make PROGRAMS="dropbear" -j$(nproc)
+	cp dropbear $sysroot/bin
+}
+
+build_ramfs() {
+	ramfs_dir=/build/out/initramfs
+
+	[ -d $ramfs_dir ] && rm -r $ramfs_dir
+
+	mkdir -p $ramfs_dir/usr/{bin,lib} $ramfs_dir/{proc,sys,dev,etc,var/log,new_root}
+	ln -s usr/bin $ramfs_dir
+	ln -s usr/lib $ramfs_dir
+
+	# musl
+	install -s $sysroot/x86_64-linux-musl/lib/libc.so $ramfs_dir/lib
+	ln -s libc.so $ramfs_dir/lib/ld-musl-x86_64.so.1
+
+	# busybox
+	install -m4755 $sysroot/bin/busybox $ramfs_dir/bin
+	while read link; do ln -s busybox $ramfs_dir/bin/$link; done < $sysroot/busybox_applets
+
+	# efibootmgr
+	install -s $sysroot/sbin/efibootmgr $ramfs_dir/bin
+	cp -P $sysroot/lib64/libefi{var,boot}.so* $ramfs_dir/lib
+	strip $ramfs_dir/lib/libefi{var,boot}.so
+
+	# e2fsprogs
+	install -s $sysroot/bin/uuidgen $ramfs_dir/bin
+	install -s $sysroot/sbin/{e2label,fsck,fsck.ext4,mkfs.ext4,resize2fs,tune2fs,blkid} \
+		$ramfs_dir/bin
+	cp -P $sysroot/lib/lib{ext2fs,com_err,blkid,uuid,e2p}.so* $ramfs_dir/lib
+	strip $ramfs_dir/lib/lib{ext2fs,com_err,blkid,uuid,e2p}.so
+
+	# wpa_supplicant
+	install -s $sysroot/bin/wpa_supplicant $ramfs_dir/bin
+	cp -P $sysroot/lib/lib{nl-3,nl-genl-3,nl-route-3}.so* $ramfs_dir/lib
+	strip $ramfs_dir/lib/lib{nl-3,nl-genl-3,nl-route-3}.so
+	cp /build/conf/wpa_supplicant.conf $ramfs_dir/etc
+
+	# user infrastructure for dropbear
+	passwd=$(cat /build/conf/ramfs_password)
+	touch $ramfs_dir/etc/shadow; chmod 600 $ramfs_dir/etc/shadow
+	groupadd -R $ramfs_dir -g0 root
+	useradd -R $ramfs_dir -p "$passwd" -u0 -g0 -d /root -s /bin/sh root
+	groupadd -R $ramfs_dir -g1000 joe
+	useradd -R $ramfs_dir -u1000 -g1000 -s /bin/sh -m joe
+	rm $ramfs_dir/etc/*- $ramfs_dir/etc/.pwd.lock
+
+	# dropbear
+	install -m600 -Dt $ramfs_dir/home/joe/.ssh $keys_dir/authorized_keys
+	chown -R 1000:1000 $ramfs_dir/home/joe
+	install -m600 -Dt $ramfs_dir/etc/dropbear $keys_dir/dropbear_*_host_key
+	install -s $sysroot/bin/dropbear $ramfs_dir/bin
+
+	cp /build/conf/init $ramfs_dir
+	cp /build/conf/inittab $ramfs_dir/etc
+	cp /build/conf/resolv.conf $ramfs_dir/etc
+	cp /build/conf/netsetup $ramfs_dir/bin
+	cp -Pr /build/conf/firmware $ramfs_dir/lib
+
+	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/out/initramfs.img
+}
+
+[ $# -lt 1 ] && usage
+
+keys_dir=/build/conf/ssh_keys
+
+case "$1" in
+	musl | busybox | efibootmgr | e2fsprogs | wpa_supplicant | dropbear | ramfs)
+		func=build_$1
+		shift
+		$func $@
+		;;
+	*)
+		echo "$1: not a valid build target"
+		;;
+esac

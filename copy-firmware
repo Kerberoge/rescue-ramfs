@@ -1,0 +1,4 @@
+#!/bin/sh
+
+mkdir -p conf/firmware
+cp -Pr /lib/firmware/* conf/firmware

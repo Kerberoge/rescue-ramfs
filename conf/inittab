@@ -1,0 +1,9 @@
+::wait:syslogd -D
+::wait:netsetup
+::wait:dropbear -sw
+
+tty1::respawn:-/bin/sh
+tty2::respawn:-/bin/sh
+tty3::respawn:-/bin/sh
+tty4::respawn:-/bin/sh
+tty5::respawn:tail -f /var/log/messages
