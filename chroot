@@ -19,6 +19,6 @@ fi
 export sysroot=/build/sysroot
 export PATH=$PATH:$sysroot/bin
 export PKG_CONFIG_PATH=$sysroot/lib/pkgconfig
-chroot $rootfs $@
+chroot $rootfs "$@"
 
 umount -R $rootfs/{proc,sys,dev} $rootfs/build/{src,conf,out}
