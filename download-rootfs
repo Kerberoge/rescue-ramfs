@@ -19,22 +19,21 @@ if [ ! -f $archive ]; then
 fi
 
 packages="gcc make pkg-config wget curl git gnupg patch
-	ncurses-devel foot-terminfo
-	cpio lz4 xz
+	ncurses-devel foot-terminfo cpio lz4 xz
 	automake autoconf gettext-devel-tools libtool
-	bison flex"
+	bison flex wpa_supplicant"
 
 mkdir -p $rootfs
 tar -xf $archive -C $rootfs
-
-./chroot sh <<-EOF
-	xbps-install -Suy xbps
-	xbps-install -uy
-	xbps-install -y $(echo $packages)
-EOF
 
 mkdir -p $rootfs/build/{src,conf,out}
 cat > $rootfs/root/.bashrc <<-EOF
 	alias ls='ls --color'
 	export PS1='\[\e[1;38;5;3m\]build-chroot \[\e[1;38;5;4m\]\w \[\e[0m\]\\$ '
+EOF
+
+./chroot sh <<-EOF
+	xbps-install -Suy xbps
+	xbps-install -uy
+	xbps-install -y $(echo $packages)
 EOF
