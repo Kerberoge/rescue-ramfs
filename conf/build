@@ -17,6 +17,18 @@ gpg_verify() {
 	for p in dirmngr keyboxd gpg-agent; do pkill $p; done || true
 }
 
+bininst() {
+	# automatically finds all libraries the binaries depend on, and installs both
+	# the binaries and their libraries into the initramfs
+
+	for bin in $@; do
+		libs=$(printf "%s\n" $libs $(chroot /build/sysroot ldd /bin/$bin |
+			awk '$1 !~ /(ld-musl-|libc)/ {print $1}') )
+	done
+	for bin in $@; do install -s $sysroot/bin/$bin $ramfs_dir/bin; done
+	for lib in $libs; do install -s $sysroot/lib/$lib $ramfs_dir/lib; done
+}
+
 build_musl() {
 	version=v0.9.11
 	url=https://github.com/richfelker/musl-cross-make.git
@@ -34,6 +46,7 @@ build_musl() {
 	ln -sf lib $sysroot/lib64
 	ln -sf . $sysroot/usr
 	ln -sf . $sysroot/x86_64-linux-musl
+	ln -sf ../lib/libc.so $sysroot/bin/ldd
 	make TARGET=x86_64-linux-musl OUTPUT=$sysroot install
 }
 
@@ -258,21 +271,13 @@ build_ramfs() {
 	while read link; do ln -s busybox $ramfs_dir/bin/$link; done < $sysroot/busybox_applets
 
 	# efibootmgr
-	install -s $sysroot/sbin/efibootmgr $ramfs_dir/bin
-	cp -P $sysroot/lib64/libefi{var,boot}.so* $ramfs_dir/lib
-	strip $ramfs_dir/lib/libefi{var,boot}.so
+	bininst efibootmgr
 
 	# e2fsprogs
-	install -s $sysroot/bin/uuidgen $ramfs_dir/bin
-	install -s $sysroot/sbin/{e2label,fsck,fsck.ext4,mkfs.ext4,resize2fs,tune2fs,blkid} \
-		$ramfs_dir/bin
-	cp -P $sysroot/lib/lib{ext2fs,com_err,blkid,uuid,e2p}.so* $ramfs_dir/lib
-	strip $ramfs_dir/lib/lib{ext2fs,com_err,blkid,uuid,e2p}.so
+	bininst uuidgen e2label fsck fsck.ext4 mkfs.ext4 resize2fs tune2fs blkid
 
 	# wpa_supplicant
-	install -s $sysroot/bin/wpa_supplicant $ramfs_dir/bin
-	cp -P $sysroot/lib/lib{nl-3,nl-genl-3,nl-route-3}.so* $ramfs_dir/lib
-	strip $ramfs_dir/lib/lib{nl-3,nl-genl-3,nl-route-3}.so
+	bininst wpa_supplicant
 	cp /build/conf/wpa_supplicant.conf $ramfs_dir/etc
 
 	# user infrastructure for dropbear
@@ -288,7 +293,7 @@ build_ramfs() {
 	install -m600 -Dt $ramfs_dir/home/joe/.ssh $keys_dir/authorized_keys
 	chown -R 1000:1000 $ramfs_dir/home/joe
 	install -m600 -Dt $ramfs_dir/etc/dropbear $keys_dir/dropbear_*_host_key
-	install -s $sysroot/bin/dropbear $ramfs_dir/bin
+	bininst dropbear
 
 	cp /build/conf/init $ramfs_dir
 	cp /build/conf/inittab $ramfs_dir/etc
