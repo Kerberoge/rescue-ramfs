@@ -9,12 +9,17 @@ sig=sha256sum.sig
 pubkey=/usr/share/void-release-keys/void-release-20250202.pub
 rootfs=buildroot
 
-if [ ! -f $archive ]; then
+if [ ! -f $archive -o -f $sums ]; then
 	curl -LO $url/$archive
 	curl -LO $url/$sums
 	curl -LO $url/$sig
 	minisign -V -p $pubkey -x $sig -m $sums
-	sha256sum -c --ignore-missing $sums
+	sum_good=$(awk -v name=$archive '$2 == "("name")" {print $4}' $sums)
+	sum=$(sha256sum $archive | awk '{print $1}')
+	if [ "$sum" != "$sum_good" ]; then
+		echo "Error: $archive: checksum does not match!"
+		exit 1
+	fi
 	rm $sums $sig
 fi
 
