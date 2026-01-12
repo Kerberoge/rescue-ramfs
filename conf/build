@@ -20,11 +20,11 @@ gpg_verify() {
 bininst() {
 	# automatically finds all libraries the binaries depend on, and installs both
 	# the binaries and their libraries into the initramfs
-
 	for bin in $@; do
 		libs=$(printf "%s\n" $libs $(chroot /build/sysroot ldd /bin/$bin |
-			awk '$1 !~ /(ld-musl-|libc)/ {print $1}') )
+			awk '$1 !~ /ld-musl-/ {print $1}') )
 	done
+	libs=$(echo "$libs" | sort | uniq)
 	for bin in $@; do install -s $sysroot/bin/$bin $ramfs_dir/bin; done
 	for lib in $libs; do install -s $sysroot/lib/$lib $ramfs_dir/lib; done
 }
@@ -261,9 +261,6 @@ build_ramfs() {
 	mkdir -p $ramfs_dir/usr/{bin,lib} $ramfs_dir/{proc,sys,dev,etc,var/log,new_root}
 	ln -s usr/bin $ramfs_dir
 	ln -s usr/lib $ramfs_dir
-
-	# musl
-	install -s $sysroot/x86_64-linux-musl/lib/libc.so $ramfs_dir/lib
 	ln -s libc.so $ramfs_dir/lib/ld-musl-x86_64.so.1
 
 	# busybox
