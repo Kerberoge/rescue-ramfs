@@ -7,6 +7,15 @@ usage() {
 	exit 1
 }
 
+download() {
+	cd /build/src
+	mkdir -p download
+	for url in $@; do
+		file=$(basename $url)
+		[ -f download/$file ] || curl -L $url -o download/$file
+	done
+}
+
 gpg_verify() {
 	file=$1
 	sig=$2
@@ -63,12 +72,9 @@ build_busybox() {
 		make menuconfig
 		cp .config /build/conf/busybox.config
 	else
+		download $url/$archive
 		[ -d $dir ] && rm -rf $dir
-		[ -f $archive ] || {
-			echo "Warning: downloading busybox source archive. Expect to wait forever (>30s)"
-			curl -LO $url/$archive
-		}
-		tar -xf $archive
+		tar -xf download/$archive
 		cd $dir
 		cp /build/conf/busybox.config .config
 		patch -p1 < /build/conf/busybox_ncurses.patch
@@ -142,10 +148,9 @@ build_ncurses() {
 	cd /build/src
 	[ -d $dir ] && rm -rf $dir
 
-	curl -LO $url/$archive
-	curl -LO $url/$sig
-	gpg_verify $archive $sig $pubkey
-	tar -xf $archive && rm $archive $sig
+	download $url/$archive $url/$sig
+	gpg_verify download/$archive download/$sig $pubkey
+	tar -xf download/$archive
 	cd $dir
 	./configure --prefix=$sysroot --with-shared --without-manpages \
 		--host=x86_64-linux-musl CFLAGS="--sysroot=$sysroot"
@@ -164,8 +169,8 @@ build_fdisk() {
 	cd /build/src
 	[ -d $dir ] && rm -rf $dir
 
-	curl -LO $url/$archive
-	tar -xf $archive && rm $archive
+	download $url/$archive
+	tar -xf download/$archive
 	cd $dir
 	./autogen.sh
 	./configure --prefix=$sysroot --disable-all-programs \
@@ -184,8 +189,8 @@ build_e2fsprogs() {
 	cd /build/src
 	[ -d $dir ] && rm -rf $dir
 
-	curl -LO $url/$archive
-	tar -xf $archive && rm $archive
+	download $url/$archive
+	tar -xf download/$archive
 	cd $dir
 	mkdir build; cd build
 	# libuuid is provided by util-linux
@@ -204,11 +209,10 @@ build_libnl() {
 	dir=${archive%.tar.gz}
 
 	cd /build/src
-	curl -LO $url/$archive
-	curl -LO $url/$sig
-	gpg_verify $archive $sig $pubkey
+	download $url/$archive $url/$sig
+	gpg_verify download/$archive download/$sig $pubkey
 	[ -d $dir ] && rm -rf $dir
-	tar -xf $archive && rm $archive $sig
+	tar -xf download/$archive
 
 	cd $dir
 	./configure --prefix=$sysroot --host=x86_64-linux-musl --with-sysroot=$sysroot
@@ -227,11 +231,10 @@ build_wpa_supplicant() {
 	dir=${archive%.tar.gz}
 
 	cd /build/src
-	curl -LO $url/$archive
-	curl -LO $url/$sig
-	gpg_verify $archive $sig $pubkey
+	download $url/$archive $url/$sig
+	gpg_verify download/$archive download/$sig $pubkey
 	[ -d $dir ] && rm -rf $dir
-	tar -xf $archive && rm $archive $sig
+	tar -xf download/$archive
 
 	cd $dir/wpa_supplicant
 	sed "s|\$sysroot|$sysroot|" /build/conf/wpa_supplicant.config > .config
@@ -249,11 +252,10 @@ build_dropbear() {
 	dir=${archive%.tar.bz2}
 
 	cd /build/src
-	curl -LO $url/$archive
-	curl -LO $url/$sig
-	gpg_verify $archive $sig $pubkey
+	download $url/$archive $url/$sig
+	gpg_verify download/$archive download/$sig $pubkey
 	[ -d $dir ] && rm -rf $dir
-	tar -xf $archive && rm $archive $sig
+	tar -xf download/$archive
 
 	cd $dir
 	./configure --disable-zlib
@@ -296,7 +298,7 @@ build_ramfs() {
 	bininst fdisk
 
 	# e2fsprogs
-	bininst uuidgen e2label fsck fsck.ext4 mkfs.ext4 resize2fs tune2fs blkid
+	bininst e2label fsck fsck.ext4 mkfs.ext4 resize2fs tune2fs blkid
 
 	# wpa_supplicant
 	bininst wpa_supplicant
