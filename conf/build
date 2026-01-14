@@ -195,28 +195,6 @@ build_e2fsprogs() {
 	make install
 }
 
-build_openssl() {
-	version=3.5.4
-	url=https://github.com/openssl/openssl/releases/download/openssl-$version
-	archive=openssl-$version.tar.gz
-	sig=$archive.asc
-	pubkey=BA5473A2B0587B07FB27CF2D216094DFD0CB81EF
-	dir=${archive%.tar.gz}
-
-	cd /build/src
-	curl -LO $url/$archive
-	curl -LO $url/$sig
-	gpg_verify $archive $sig $pubkey
-	[ -d $dir ] && rm -rf $dir
-	tar -xf $archive && rm $archive $sig
-
-	cd $dir
-	./Configure --prefix=$sysroot --openssldir=etc/ssl no-docs no-apps \
-		CROSS_COMPILE=x86_64-linux-musl- CFLAGS="--sysroot=$sysroot"
-	make -j$(nproc)
-	make install
-}
-
 build_libnl() {
 	version=3.11.0
 	url=https://github.com/thom311/libnl/releases/download/libnl${version//./_}
@@ -239,7 +217,6 @@ build_libnl() {
 }
 
 build_wpa_supplicant() {
-	#build_openssl
 	build_libnl
 
 	version=2.11
