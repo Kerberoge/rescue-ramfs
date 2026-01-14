@@ -131,6 +131,50 @@ build_efibootmgr() {
 	make prefix=$sysroot install
 }
 
+build_ncurses() {
+	version=6.5
+	url=https://invisible-island.net/archives/ncurses
+	archive=ncurses-$version.tar.gz
+	sig=$archive.asc
+	pubkey=19882D92DDA4C400C22C0D56CC2AF4472167BE03
+	dir=${archive%.tar.gz}
+
+	cd /build/src
+	[ -d $dir ] && rm -rf $dir
+
+	curl -LO $url/$archive
+	curl -LO $url/$sig
+	gpg_verify $archive $sig $pubkey
+	tar -xf $archive && rm $archive $sig
+	cd $dir
+	./configure --prefix=$sysroot --with-shared --without-manpages \
+		--host=x86_64-linux-musl CFLAGS="--sysroot=$sysroot"
+	make -j$(nproc)
+	make install
+}
+
+build_fdisk() {
+	build_ncurses
+
+	version=2.41.2
+	url=https://github.com/util-linux/util-linux/archive/refs/tags
+	archive=v$version.tar.gz
+	dir=util-linux-$version
+
+	cd /build/src
+	[ -d $dir ] && rm -rf $dir
+
+	curl -LO $url/$archive
+	tar -xf $archive && rm $archive
+	cd $dir
+	./autogen.sh
+	./configure --prefix=$sysroot --disable-all-programs \
+		--enable-fdisks --enable-libfdisk --enable-libuuid --enable-libsmartcols \
+		--host=x86_64-linux-musl CFLAGS="--sysroot=$sysroot -L=/lib"
+	make -j$(nproc) fdisk
+	make install
+}
+
 build_e2fsprogs() {
 	version=1.47.2
 	url=https://github.com/tytso/e2fsprogs/archive/refs/tags
@@ -144,7 +188,8 @@ build_e2fsprogs() {
 	tar -xf $archive && rm $archive
 	cd $dir
 	mkdir build; cd build
-	../configure --prefix=$sysroot --enable-elf-shlibs \
+	# libuuid is provided by util-linux
+	../configure --prefix=$sysroot --enable-elf-shlibs --disable-libuuid \
 		--host=x86_64-linux-musl CFLAGS="--sysroot=$sysroot"
 	make -j$(nproc)
 	make install
@@ -270,6 +315,9 @@ build_ramfs() {
 	# efibootmgr
 	bininst efibootmgr
 
+	# fdisk
+	bininst fdisk
+
 	# e2fsprogs
 	bininst uuidgen e2label fsck fsck.ext4 mkfs.ext4 resize2fs tune2fs blkid
 
@@ -307,7 +355,7 @@ build_ramfs() {
 keys_dir=/build/conf/ssh_keys
 
 case "$1" in
-	musl | busybox | efibootmgr | e2fsprogs | wpa_supplicant | dropbear | ramfs)
+	musl | busybox | efibootmgr | fdisk | e2fsprogs | wpa_supplicant | dropbear | ramfs)
 		func=build_$1
 		shift
 		$func $@
