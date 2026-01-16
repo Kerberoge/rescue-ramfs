@@ -57,6 +57,8 @@ build_musl() {
 	ln -sf . $sysroot/x86_64-linux-musl
 	ln -sf ../lib/libc.so $sysroot/bin/ldd
 	make TARGET=x86_64-linux-musl OUTPUT=$sysroot install
+	# musl-cross-make links this to /lib/libc.so which breaks key conversion in build_dropbear()
+	ln -sf libc.so $sysroot/lib/ld-musl-x86_64.so.1
 }
 
 build_busybox() {
@@ -258,23 +260,20 @@ build_dropbear() {
 	tar -xf download/$archive
 
 	cd $dir
-	./configure --disable-zlib
-	make PROGRAMS="dropbearconvert" -j$(nproc)
+	./configure --prefix=$sysroot --disable-zlib \
+		--disable-lastlog --disable-utmp --disable-wtmp \
+		--host=x86_64-linux-musl CFLAGS="-Os -W -Wall --sysroot=$sysroot"
+	make PROGRAMS="dropbear dropbearconvert" -j$(nproc)
+	cp dropbear dropbearconvert $sysroot/bin
+
 	if [ ! -d $keys_dir ] || ! ls $keys_dir | grep -q 'ssh_host_.*_key'; then
 		echo "Error: no ssh keys found in $keys_dir"
 		exit 1
 	fi
 	for key in $keys_dir/ssh_host_*_key; do
-		./dropbearconvert openssh dropbear \
+		$sysroot/lib/ld-musl-x86_64.so.1 dropbearconvert openssh dropbear \
 			$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
 	done
-	make clean
-
-	./configure --prefix=$sysroot --disable-zlib \
-		--disable-lastlog --disable-utmp --disable-wtmp \
-		--host=x86_64-linux-musl CFLAGS="-Os -W -Wall --sysroot=$sysroot"
-	make PROGRAMS="dropbear" -j$(nproc)
-	cp dropbear $sysroot/bin
 }
 
 build_ramfs() {
