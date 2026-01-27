@@ -1,4 +1,6 @@
 ::wait:syslogd -D
+::wait:netsetup
+::wait:dropbear -sw
 
 tty1::respawn:-/bin/sh
 tty2::respawn:-/bin/sh

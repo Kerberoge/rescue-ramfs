@@ -282,9 +282,12 @@ build_ramfs_stage1() {
 	ln -s libc.so $ramfs_dir/lib/ld-musl-x86_64.so.1
 
 	cp -Pr /lib/firmware $ramfs_dir/lib
-	install -Dt $ramfs_dir/etc/dropbear /etc/ssh/ssh_host_*_key
-	install -m600 -Dt $ramfs_dir/home/joe/.ssh /home/joe/.ssh/authorized_keys
-	chown -R 1000:1000 $ramfs_dir/home/joe
+
+	if [ "$1" = "net" ]; then
+		install -m600 -Dt $ramfs_dir/etc/dropbear /etc/ssh/ssh_host_*_key
+		install -m600 -Dt $ramfs_dir/home/joe/.ssh /home/joe/.ssh/authorized_keys
+		chown -R 1000:1000 $ramfs_dir/home/joe
+	fi
 }
 
 build_ramfs_stage2() {
@@ -305,31 +308,36 @@ build_ramfs_stage2() {
 	# e2fsprogs
 	bininst e2label fsck fsck.ext4 mkfs.ext4 resize2fs tune2fs blkid
 
-	# wpa_supplicant
-	bininst wpa_supplicant
-	cp /build/conf/wpa_supplicant.conf $ramfs_dir/etc
+	if [ "$1" = "net" ]; then
+		# wpa_supplicant
+		bininst wpa_supplicant
+		cp /build/conf/wpa_supplicant.conf $ramfs_dir/etc
 
-	# user infrastructure for dropbear
-	passwd=$(cat /build/conf/ramfs_password)
-	touch $ramfs_dir/etc/shadow; chmod 600 $ramfs_dir/etc/shadow
-	groupadd -R $ramfs_dir -g0 root
-	useradd -R $ramfs_dir -p "$passwd" -u0 -g0 -d /root -s /bin/sh root
-	groupadd -R $ramfs_dir -g1000 joe
-	useradd -R $ramfs_dir -u1000 -g1000 -s /bin/sh -m joe
-	rm $ramfs_dir/etc/*- $ramfs_dir/etc/.pwd.lock
+		# user infrastructure for dropbear
+		passwd=$(cat /build/conf/ramfs_password)
+		touch $ramfs_dir/etc/shadow; chmod 600 $ramfs_dir/etc/shadow
+		groupadd -R $ramfs_dir -g0 root
+		useradd -R $ramfs_dir -p "$passwd" -u0 -g0 -d /root -s /bin/sh root
+		groupadd -R $ramfs_dir -g1000 joe
+		useradd -R $ramfs_dir -u1000 -g1000 -s /bin/sh -m joe
+		rm $ramfs_dir/etc/*- $ramfs_dir/etc/.pwd.lock
 
-	# dropbear
-	for key in $ramfs_dir/etc/dropbear/ssh_host_*_key; do
-		$sysroot/lib/ld-musl-x86_64.so.1 $sysroot/bin/dropbearconvert openssh dropbear \
-			$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
-		rm $key
-	done
-	bininst dropbear
+		# dropbear
+		for key in $ramfs_dir/etc/dropbear/ssh_host_*_key; do
+			$sysroot/lib/ld-musl-x86_64.so.1 $sysroot/bin/dropbearconvert openssh dropbear \
+				$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
+			rm $key
+		done
+		bininst dropbear
+
+		cp /build/conf/resolv.conf $ramfs_dir/etc
+		cp /build/conf/netsetup $ramfs_dir/bin
+		cp /build/conf/inittab.network $ramfs_dir/etc/inittab
+	else
+		cp /build/conf/inittab $ramfs_dir/etc
+	fi
 
 	cp /build/conf/init $ramfs_dir
-	cp /build/conf/inittab $ramfs_dir/etc
-	cp /build/conf/resolv.conf $ramfs_dir/etc
-	cp /build/conf/netsetup $ramfs_dir/bin
 	cp /build/conf/procs $ramfs_dir/bin
 
 	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/src/$ramfs.img
@@ -353,8 +361,9 @@ case "$1" in
 			echo "Error: building ramfs requires root permissions"
 			exit 1
 		fi
-		build_ramfs_stage1
-		exec $0 ramfs_stage2
+		shift
+		build_ramfs_stage1 $@
+		exec $0 ramfs_stage2 $@
 		;;
 	*)
 		echo "$1: not a valid build target"
