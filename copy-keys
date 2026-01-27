@@ -1,5 +1,0 @@
-#!/bin/sh
-
-mkdir -p conf/ssh_keys
-cp /home/joe/.ssh/authorized_keys conf/ssh_keys
-cp /etc/ssh/ssh_host_*_key conf/ssh_keys

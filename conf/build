@@ -30,7 +30,7 @@ bininst() {
 	# automatically finds all libraries the binaries depend on, and installs both
 	# the binaries and their libraries into the initramfs
 	for bin in $@; do
-		libs=$(printf "%s\n" $libs $(chroot /build/sysroot ldd /bin/$bin |
+		libs=$(printf "%s\n" $libs $(chroot $sysroot ldd /bin/$bin |
 			awk '$1 !~ /ld-musl-/ {print $1}') )
 	done
 	libs=$(echo "$libs" | sort | uniq)
@@ -265,26 +265,32 @@ build_dropbear() {
 		--host=x86_64-linux-musl CFLAGS="-Os -W -Wall --sysroot=$sysroot"
 	make PROGRAMS="dropbear dropbearconvert" -j$(nproc)
 	cp dropbear dropbearconvert $sysroot/bin
-
-	if [ ! -d $keys_dir ] || ! ls $keys_dir | grep -q 'ssh_host_.*_key'; then
-		echo "Error: no ssh keys found in $keys_dir"
-		exit 1
-	fi
-	for key in $keys_dir/ssh_host_*_key; do
-		$sysroot/lib/ld-musl-x86_64.so.1 dropbearconvert openssh dropbear \
-			$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
-	done
 }
 
-build_ramfs() {
-	ramfs_dir=/build/out/initramfs
+# stage 1 runs outside chroot, stage 2 runs inside chroot
+# both stages run with root permissions
+
+build_ramfs_stage1() {
+	ramfs_dir=$base_dir/src/$ramfs
+
+	echo "Running stage 1"
 
 	[ -d $ramfs_dir ] && rm -r $ramfs_dir
-
 	mkdir -p $ramfs_dir/usr/{bin,lib} $ramfs_dir/{proc,sys,dev,etc,var/log,new_root}
 	ln -s usr/bin $ramfs_dir
 	ln -s usr/lib $ramfs_dir
 	ln -s libc.so $ramfs_dir/lib/ld-musl-x86_64.so.1
+
+	cp -Pr /lib/firmware $ramfs_dir/lib
+	install -Dt $ramfs_dir/etc/dropbear /etc/ssh/ssh_host_*_key
+	install -m600 -Dt $ramfs_dir/home/joe/.ssh /home/joe/.ssh/authorized_keys
+	chown -R 1000:1000 $ramfs_dir/home/joe
+}
+
+build_ramfs_stage2() {
+	ramfs_dir=/build/src/$ramfs
+
+	echo "Running stage 2"
 
 	# busybox
 	install -m4755 $sysroot/bin/busybox $ramfs_dir/bin
@@ -313,9 +319,11 @@ build_ramfs() {
 	rm $ramfs_dir/etc/*- $ramfs_dir/etc/.pwd.lock
 
 	# dropbear
-	install -m600 -Dt $ramfs_dir/home/joe/.ssh $keys_dir/authorized_keys
-	chown -R 1000:1000 $ramfs_dir/home/joe
-	install -m600 -Dt $ramfs_dir/etc/dropbear $keys_dir/dropbear_*_host_key
+	for key in $ramfs_dir/etc/dropbear/ssh_host_*_key; do
+		$sysroot/lib/ld-musl-x86_64.so.1 $sysroot/bin/dropbearconvert openssh dropbear \
+			$key $(echo $key | sed -E 's/ssh_host_(.*)_key/dropbear_\1_host_key/')
+		rm $key
+	done
 	bininst dropbear
 
 	cp /build/conf/init $ramfs_dir
@@ -323,20 +331,30 @@ build_ramfs() {
 	cp /build/conf/resolv.conf $ramfs_dir/etc
 	cp /build/conf/netsetup $ramfs_dir/bin
 	cp /build/conf/procs $ramfs_dir/bin
-	cp -Pr /build/conf/firmware $ramfs_dir/lib
 
-	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/out/initramfs.img
+	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/src/$ramfs.img
 }
 
 [ $# -lt 1 ] && usage
 
-keys_dir=/build/conf/ssh_keys
+base_dir=$(dirname $0)/..
+sysroot=/build/sysroot
+ramfs=initramfs
 
 case "$1" in
-	musl | busybox | efibootmgr | fdisk | e2fsprogs | wpa_supplicant | dropbear | ramfs)
+	musl | busybox | efibootmgr | fdisk | e2fsprogs | wpa_supplicant | dropbear | ramfs_stage2)
+		[ $0 = "/build/scripts/build" ] || exec $base_dir/scripts/chroot /build/scripts/build $@
 		func=build_$1
 		shift
 		$func $@
+		;;
+	ramfs)
+		if [ $(whoami) != "root" ]; then
+			echo "Error: building ramfs requires root permissions"
+			exit 1
+		fi
+		build_ramfs_stage1
+		exec $0 ramfs_stage2
 		;;
 	*)
 		echo "$1: not a valid build target"
