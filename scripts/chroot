@@ -9,7 +9,8 @@ if [ -z "$UNSHARE" ]; then
 	fi
 fi
 
-rootfs=buildroot
+base_dir=$(dirname $0)/..
+rootfs=$base_dir/buildroot
 
 for m in /proc /sys /dev; do
 	mount --rbind $m $rootfs/$m
@@ -17,7 +18,7 @@ done
 
 for m in src conf scripts; do
 	mkdir -p $rootfs/build/$m
-	mount --bind $m $rootfs/build/$m
+	mount --bind $base_dir/$m $rootfs/build/$m
 done
 
 export sysroot=/build/sysroot

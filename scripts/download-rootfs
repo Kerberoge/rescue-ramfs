@@ -9,6 +9,8 @@ sig=sha256sum.sig
 pubkey=/usr/share/void-release-keys/void-release-20250202.pub
 rootfs=buildroot
 
+cd $(dirname $0)/..
+
 if [ ! -f $archive -o -f $sums ]; then
 	curl -LO $url/$archive
 	curl -LO $url/$sums
@@ -31,14 +33,13 @@ packages="gcc make pkg-config wget curl git gnupg patch
 mkdir -p $rootfs
 tar -xf $archive -C $rootfs
 
-mkdir -p $rootfs/build/{src,conf,out}
 cp conf/resolv.conf $rootfs/etc
 cat > $rootfs/root/.bashrc <<-EOF
 	alias ls='ls --color'
 	export PS1='\[\e[1;38;5;3m\]build-chroot \[\e[1;38;5;4m\]\w \[\e[0m\]\\$ '
 EOF
 
-./chroot sh <<-EOF
+scripts/chroot sh <<-EOF
 	xbps-install -Suy xbps
 	xbps-install -uy
 	xbps-install -y $(echo $packages)

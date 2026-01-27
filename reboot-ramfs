@@ -1,7 +1,0 @@
-#!/bin/sh
-
-set -e
-
-mv out/initramfs.img /boot
-efibootmgr -n1
-reboot
