@@ -1,21 +1,24 @@
 #!/bin/sh
 
-rootfs=buildroot
+if [ -z "$UNSHARE" ]; then
+	export UNSHARE=1
+	if [ $(whoami) = "root" ]; then
+		exec unshare --mount $0 "$@"
+	else
+		exec unshare --mount --map-root-user $0 "$@"
+	fi
+fi
 
-[ $(whoami) = "root" ] || exec unshare --mount --map-root-user $0 $@
+rootfs=buildroot
 
 for m in /proc /sys /dev; do
 	mount --rbind $m $rootfs/$m
 done
 
-for m in src conf out; do
+for m in src conf scripts; do
+	mkdir -p $rootfs/build/$m
 	mount --bind $m $rootfs/build/$m
 done
-
-if [ "$1" = "build" ]; then
-	shift
-	set -- /build/conf/build $@
-fi
 
 export sysroot=/build/sysroot
 export PATH=$PATH:$sysroot/bin
