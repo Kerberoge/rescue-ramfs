@@ -1,27 +1,37 @@
 ==========   rescue-ramfs - Tools for creating a minimal recovery initramfs   ==========
 
-HOW TO USE:
- 1. # ./download-ramfs
- 2. # ./chroot build musl
- 3. # ./chroot build busybox
- 4. # ./chroot build efibootmgr
- 5. # ./chroot build fdisk
- 6. # ./chroot build e2fsprogs
- 7. # ./chroot build wpa_supplicant
- 8. # ./copy-keys  (copies host ssh private keys)
- 9. # ./chroot build dropbear
-10. $ ./set-passwd (sets the root password for the initramfs)
-11. $ ./copy-firmware
-12. # ./gen-wificonf
-13. Edit the variables in conf/netsetup to reflect your own settings.
-14. Edit the ESP variable in conf/init to contain the location of your EFI System
-    Partition.
-15. # ./chroot build ramfs
-16. Edit reboot-ramfs to suit your preferences and reboot:
-    # ./reboot-ramfs
+HOW TO USE
+Step 1 - Building tools
+  $ ./scripts/download-ramfs
+  $ ./scripts/build musl
+  $ ./scripts/build busybox
+  $ ./scripts/build efibootmgr
+  $ ./scripts/build fdisk
+  $ ./scripts/build e2fsprogs
+For network support, also build the following:
+  $ ./scripts/build wpa_supplicant
+  $ ./scripts/build dropbear
 
-After running './chroot build busybox' once, you may configure busybox by running:
- # ./chroot build busybox configure
+Step 2 - Configuration
+  Edit the ESP variable in conf/init to contain the location of your EFI System
+    Partition.
+For network support:
+  $ ./scripts/set-passwd (sets the root password for the initramfs)
+  $ ./scripts/gen-wificonf
+  Edit the variables in conf/netsetup to reflect your own settings.
+
+Step 3 - Building initramfs
+For an image without network support:
+  # ./scripts/build ramfs
+For an image with network support:
+  # ./scripts/build ramfs net
+
+Step 4 - Reboot and test
+  Edit reboot-ramfs to suit your preferences and reboot:
+  # ./scripts/reboot-ramfs
+
+After running './scripts/build busybox' once, you may configure busybox by running:
+  $ ./scripts/build busybox configure
 
 Once you are booted into the initramfs, you should be able to ssh into your
 machine as you normally do.
