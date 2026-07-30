@@ -1,6 +1,6 @@
 ::wait:syslogd -D
 ::wait:netsetup
-::wait:dropbear -sw
+::wait:dropbear -sw -p 1983
 
 tty1::respawn:-/bin/sh
 tty2::respawn:-/bin/sh

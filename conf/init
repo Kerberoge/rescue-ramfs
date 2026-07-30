@@ -1,23 +1,30 @@
 #!/bin/sh
 
+ESP=/dev/sda1
+
 mount -o nosuid,noexec,nodev -t proc proc /proc
 mount -o mode=0755,nosuid -t devtmpfs dev /dev
 
-while read -r -d ' ' arg; do
-	if echo "$arg" | grep -q '^root='; then
-		rootdev=$(echo "$arg" | cut -d= -f2)
-	fi
-done < /proc/cmdline
-
-if [ -n "$rootdev" ]; then
-	mount $rootdev /new_root
-	mount --move /proc /new_root/proc
-	mount --move /dev /new_root/dev
-	exec switch_root /new_root /sbin/init
-else
+mount $ESP /boot
+if [ -e /boot/rescue ]; then
 	# rescue mode
+	rm /boot/rescue
+
 	mount -o nosuid,noexec,nodev -t sysfs sys /sys
 	mount -o nosuid,noexec,nodev -t efivarfs efivarfs /sys/firmware/efi/efivars
 	mkdir /dev/pts; mount -o mode=0620,gid=5,nosuid,noexec -t devpts devpts /dev/pts
 	exec /bin/init
+else
+	umount /boot
+
+	while read -r -d ' ' arg; do
+		if echo "$arg" | grep -q '^root='; then
+			rootdev=$(echo "$arg" | cut -d= -f2)
+		fi
+	done < /proc/cmdline
+
+	mount $rootdev /new_root
+	mount --move /proc /new_root/proc
+	mount --move /dev /new_root/dev
+	exec switch_root /new_root /sbin/init
 fi

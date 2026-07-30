@@ -282,7 +282,7 @@ build_ramfs() {
 
 	[ -d $ramfs_dir ] && rm -r $ramfs_dir
 
-	mkdir -p $ramfs_dir/usr/{bin,lib} $ramfs_dir/{proc,sys,dev,etc,var/log,new_root}
+	mkdir -p $ramfs_dir/usr/{bin,lib} $ramfs_dir/{proc,sys,dev,etc,var/log,boot,new_root}
 	ln -s usr/bin $ramfs_dir
 	ln -s usr/lib $ramfs_dir
 	ln -s libc.so $ramfs_dir/lib/ld-musl-x86_64.so.1
@@ -326,7 +326,7 @@ build_ramfs() {
 	cp /build/conf/procs $ramfs_dir/bin
 	cp -Pr /build/conf/firmware $ramfs_dir/lib
 
-	cd $ramfs_dir; find . | cpio -o -H newc | gzip > /build/out/initramfs.img
+	cd $ramfs_dir; find . | cpio -o -H newc | lz4 -l > /build/out/initramfs.img
 }
 
 [ $# -lt 1 ] && usage
